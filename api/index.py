@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from flask import Flask, request, jsonify, render_template, session
 from openai import OpenAI
+import asyncio
+from agents import Agent, Runner, WebSearchTool, trace
 
 # Load environment variables
 load_dotenv()
@@ -42,17 +44,31 @@ class ConversationContext(BaseModel):
 
 # ----------------------------- AGENTS ----------------------------------
 
-def web_search_agent(query: str) -> str:
-    """Simulated web search agent - would integrate with real search API"""
+# Async helper that runs the Agents-SDK powered web search logic borrowed from test.py
+async def _agent_web_search(query: str) -> str:
+    """Run a one-off web search via OpenAI Agents SDK and return the response text."""
+    agent = Agent(
+        name="Web searcher",
+        instructions="You are a helpful agent.",
+        tools=[WebSearchTool(user_location={"type": "approximate", "city": "New York"})],
+    )
+
+    # We wrap the run in a trace span so that it shows up in the OpenAI dashboard if tracing is enabled.
+    with trace("web_search_agent"):
+        result = await Runner.run(agent, query)
+    return result.final_output
+
+def _run_async(coro):
+    """Run *coro* in an event loop, creating one if necessary, and return its result."""
     try:
-        response = client.responses.create(
-            model="gpt-4o",
-            tools=[{"type": "web_search_preview"}],
-            input=query
-        )
-        return response.output_text
-    except Exception as e:
-        return f"Web search error: {str(e)}"
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop → create a temporary one
+        return asyncio.run(coro)
+    else:
+        return loop.run_until_complete(coro)
+
+# NOTE: The previous `web_search_agent` helper has been removed.
 
 def knowledge_base_agent(query: str) -> str:
     """Simulated knowledge base search agent"""
@@ -104,7 +120,7 @@ def router_agent(query: str, conversation_history: list = None) -> dict:
         result = json.loads(response.choices[0].message.content)
 
         if result.get("tool") == "web_search":
-            agent_response = web_search_agent(result.get("query", query))
+            agent_response = _run_async(_agent_web_search(result.get("query", query)))
         else:
             agent_response = knowledge_base_agent(result.get("query", query))
 
@@ -118,7 +134,7 @@ def router_agent(query: str, conversation_history: list = None) -> dict:
     except Exception as e:
         logger.error(f"Router agent error: {e}")
         return {
-            "response": web_search_agent(query),
+            "response": _run_async(_agent_web_search(query)),
             "tool_used": "web_search",
             "reasoning": "Fallback due to routing error",
             "processed_query": query
