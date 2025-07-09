@@ -1,0 +1,114 @@
+import os
+import uuid
+import asyncio
+from dotenv import load_dotenv
+from pydantic import BaseModel
+from flask import Flask, request, jsonify
+from agents import (
+    Agent,
+    Runner,
+    WebSearchTool,
+    FileSearchTool,
+    handoff,
+    MessageOutputItem,
+    ToolCallOutputItem,
+    ItemHelpers,
+    TResponseInputItem,
+)
+
+# ✅ Load environment variables
+load_dotenv()
+
+# ✅ Flask setup
+app = Flask(__name__)
+
+# ✅ In-memory session storage for conversation history
+SESSION_MEMORY = {}
+
+# ✅ Define the assistant's memory structure
+class PersonalAssistantContext(BaseModel):
+    conversation_history: list[TResponseInputItem] = []  # Stores all messages in the session
+
+# ✅ Tools (Web Search & File Search)
+web_search_tool = WebSearchTool(search_context_size="medium")
+file_search_tool = FileSearchTool(vector_store_ids=["your_vector_store_id"])
+
+# ✅ Agents (Web Search, Knowledge Base, Router)
+web_search_agent = Agent[PersonalAssistantContext](
+    name="Web Search Agent",
+    instructions="Use web search for real-time information when a query is time-sensitive.",
+    tools=[web_search_tool]
+)
+
+vector_store_agent = Agent[PersonalAssistantContext](
+    name="Knowledge Base Agent",
+    instructions="Retrieve information from the knowledge base when a query is fact-based or historical.",
+    tools=[file_search_tool]
+)
+
+router_agent = Agent[PersonalAssistantContext](
+    name="Router Agent",
+    instructions=(
+        "You are a smart assistant. Your job is to route questions to the appropriate tool:\n\n"
+        "- Use **FileSearchTool** if the user asks about **products, services, FAQs, troubleshooting, or company-related information**.\n"
+        "- Use **WebSearchTool** for general knowledge, news, current events, or if the answer is not found in the knowledge base.\n\n"
+        "If unsure, default to the **knowledge base first**, and only use web search if no relevant results are found."
+    ),
+    handoffs=[
+        handoff(agent=vector_store_agent),  # ✅ Prioritize FileSearchTool
+        handoff(agent=web_search_agent),  # ✅ Use web search as fallback
+    ],
+)
+
+# ✅ API Endpoint: /ask
+@app.route('/ask', methods=['POST'])
+async def ask():
+    """Receives a question, maintains session memory, and returns only the latest response."""
+    try:
+        data = request.json
+        user_question = data.get("question", "")
+        session_id = data.get("session_id", None)
+
+        if not user_question:
+            return jsonify({"error": "No question provided"}), 400
+        if not session_id:
+            return jsonify({"error": "No session_id provided"}), 400
+
+        # ✅ Retrieve or initialize session memory
+        if session_id not in SESSION_MEMORY:
+            SESSION_MEMORY[session_id] = PersonalAssistantContext(conversation_history=[])
+
+        session_context = SESSION_MEMORY[session_id]
+
+        # ✅ Add user question to conversation history
+        session_context.conversation_history.append({"content": user_question, "role": "user"})
+
+        # ✅ Prepare input
+        input_items = session_context.conversation_history
+
+        # ✅ Run the assistant
+        result = await Runner.run(router_agent, input_items, context=session_context)
+
+        # ✅ Extract latest response
+        response_text = None
+        for new_item in result.new_items:
+            if isinstance(new_item, MessageOutputItem):
+                response_text = ItemHelpers.text_message_output(new_item)
+            elif isinstance(new_item, ToolCallOutputItem):
+                response_text = new_item.output  # Use tool output if available
+
+        # ✅ Save response in conversation history
+        session_context.conversation_history.append({"content": response_text, "role": "assistant"})
+
+        return jsonify({
+            "session_id": session_id,
+            "question": user_question,
+            "text": response_text if response_text else "I couldn't find an answer."
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ✅ Run the Flask app
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
