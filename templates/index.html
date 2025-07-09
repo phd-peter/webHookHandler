@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenAI Multi-Agent Assistant</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid h-100">
+        <div class="row h-100">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 sidebar p-3">
+                <div class="d-flex align-items-center mb-4">
+                    <i class="fas fa-robot text-primary me-2"></i>
+                    <h5 class="mb-0">AI Assistant</h5>
+                </div>
+                
+                <div class="mb-3">
+                    <button id="newChatBtn" class="btn btn-primary w-100">
+                        <i class="fas fa-plus me-2"></i>New Chat
+                    </button>
+                </div>
+                
+                <div class="mb-3">
+                    <h6 class="text-muted">Session Info</h6>
+                    <small id="sessionInfo" class="text-muted">No active session</small>
+                </div>
+                
+                <div class="mb-3">
+                    <h6 class="text-muted">Available Tools</h6>
+                    <div class="small">
+                        <div class="mb-1">
+                            <i class="fas fa-search text-info me-1"></i>Web Search
+                        </div>
+                        <div class="mb-1">
+                            <i class="fas fa-file-search text-warning me-1"></i>Knowledge Base
+                        </div>
+                        <div class="mb-1">
+                            <i class="fas fa-route text-success me-1"></i>Smart Routing
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-auto">
+                    <button id="healthCheckBtn" class="btn btn-outline-secondary btn-sm w-100">
+                        <i class="fas fa-heartbeat me-1"></i>Health Check
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="col-md-9 col-lg-10 main-content">
+                <div class="container-fluid h-100 d-flex flex-column">
+                    <!-- Header -->
+                    <div class="row">
+                        <div class="col">
+                            <div class="d-flex justify-content-between align-items-center py-3 border-bottom">
+                                <h4 class="mb-0">Multi-Agent AI Assistant</h4>
+                                <div class="status-indicator">
+                                    <span id="statusBadge" class="badge bg-secondary">Disconnected</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Chat Messages -->
+                    <div class="row flex-grow-1 overflow-hidden">
+                        <div class="col">
+                            <div id="chatMessages" class="chat-container h-100 p-3">
+                                <div class="welcome-message text-center text-muted py-5">
+                                    <i class="fas fa-comments fa-3x mb-3"></i>
+                                    <h5>Welcome to the Multi-Agent AI Assistant</h5>
+                                    <p>Ask me anything! I can search the web, access knowledge bases, and provide intelligent responses.</p>
+                                    <div class="row mt-4">
+                                        <div class="col-md-4">
+                                            <div class="card bg-dark border-secondary">
+                                                <div class="card-body text-center">
+                                                    <i class="fas fa-globe text-info mb-2"></i>
+                                                    <h6>Web Search</h6>
+                                                    <small class="text-muted">Real-time information and current events</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="card bg-dark border-secondary">
+                                                <div class="card-body text-center">
+                                                    <i class="fas fa-database text-warning mb-2"></i>
+                                                    <h6>Knowledge Base</h6>
+                                                    <small class="text-muted">Company docs and FAQs</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="card bg-dark border-secondary">
+                                                <div class="card-body text-center">
+                                                    <i class="fas fa-brain text-success mb-2"></i>
+                                                    <h6>Smart Routing</h6>
+                                                    <small class="text-muted">Intelligent question routing</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Input Area -->
+                    <div class="row">
+                        <div class="col">
+                            <div class="input-area p-3 border-top">
+                                <form id="questionForm">
+                                    <div class="input-group">
+                                        <input type="text" 
+                                               id="questionInput" 
+                                               class="form-control form-control-lg" 
+                                               placeholder="Type your question here..."
+                                               autocomplete="off">
+                                        <button type="submit" 
+                                                id="sendBtn" 
+                                                class="btn btn-primary px-4">
+                                            <i class="fas fa-paper-plane"></i>
+                                        </button>
+                                    </div>
+                                </form>
+                                <div class="small text-muted mt-2">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    The assistant will automatically choose the best tool for your question.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading Modal -->
+    <div class="modal fade" id="loadingModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center py-4">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div>Processing your question...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
