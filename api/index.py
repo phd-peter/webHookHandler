@@ -43,20 +43,14 @@ class ConversationContext(BaseModel):
 # ----------------------------- AGENTS ----------------------------------
 
 def web_search_agent(query: str) -> str:
-    """Simulated web search agent – would integrate with real search API"""
+    """Simulated web search agent - would integrate with real search API"""
     try:
-        response = client.chat.completions.create(
+        response = client.responses.create(
             model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a web search specialist. For this query, provide information as if you just searched the web for current, real-time information. Be specific and informative."
-                },
-                {"role": "user", "content": f"Search for: {query}"}
-            ],
-            temperature=0.7
+            tools=[{"type": "web_search_preview"}],
+            input=query
         )
-        return response.choices[0].message.content
+        return response.output_text
     except Exception as e:
         return f"Web search error: {str(e)}"
 
